@@ -64,7 +64,11 @@ def draw_landmarks(image, landmarks, shift_x=0, shift_y=0, color=(0, 0, 0)):
 
 
 def Overlay(frames1, frames2, output_path, accuracy_threshold=10):
-    out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), 30.0, (1280, 480))
+        # Define the fourcc code for H.264 compression
+    fourcc = cv2.VideoWriter_fourcc(*'avc1')
+
+    # Create a VideoWriter object with H.264 codec
+    out = cv2.VideoWriter(output_path, fourcc, 30.0, (1280, 480))
 
     total_accurate_matches = 0
     total_leg_angles = 0

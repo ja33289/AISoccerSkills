@@ -5,44 +5,27 @@ import os
 import numpy as np
 import math
 
-def Feedback(video_path):
-    mp_pose = mp.solutions.pose
+def Feedback(video_file):
     mp_drawing = mp.solutions.drawing_utils
-    pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+    mp_pose = mp.solutions.pose
 
-    cap = cv2.VideoCapture(video_path)
-
+    cap = cv2.VideoCapture(video_file)
     if not cap.isOpened():
         print("Could not open the video file.")
-        return
+        return None, None
 
     frames = []
-    pose_data = []
-
-    while cap.isOpened():
-        ret, frame = cap.read()
-
-        if not ret:
-            break
-
-        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        image.flags.writeable = False
-
-        results = pose.process(image)
-
-        image.flags.writeable = True
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
-        if results.pose_landmarks:
-            landmarks = [[landmark.x, landmark.y] for landmark in results.pose_landmarks.landmark]
-            pose_data.append(landmarks)
-            mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
-
-        frames.append(image)
+    with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = pose.process(frame_rgb)
+            frames.append([res.pose_landmarks for res in results.pose_landmarks])
 
     cap.release()
-
-    return frames, pose_data
+    return frames, None
 
 def connect_landmarks(image, landmarks, shift_x=0, shift_y=0):
     connections = [(11, 12), (11, 13), (12, 14), (13, 15), (14, 16), (15, 17),  # Connect head to upper body

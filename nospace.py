@@ -149,37 +149,27 @@ def Overlay(frames1, frames2, output_path, accuracy_threshold=10):
     out.release()
     cv2.destroyAllWindows()
 
+
 def main():
     st.title("AI Soccer Skillz")
     st.subheader("Upload two videos to get your percentage of accuracy!")
 
-    exercise_video_file = st.file_uploader("Upload Exercise Video", type=['mp4','mov'], key='exercise_video')
+    exercise_video_file = st.file_uploader("Upload Exercise Video", type=['mp4', 'mov'], key='exercise_video')
     if not exercise_video_file:
-        return None    
-    
-    user_video_file = st.file_uploader("Upload User Video", type=['mp4','mov'], key='user_video')
+        st.warning("Please upload the exercise video.")
+        return
+
+    user_video_file = st.file_uploader("Upload User Video", type=['mp4', 'mov'], key='user_video')
     if not user_video_file:
-        return None 
-    
-    exercise_video_path = os.path.join("uploads", exercise_video_file.name)
-    user_video_path = os.path.join("uploads", user_video_file.name)
-    
-    with open(exercise_video_path, "wb") as f:
-        f.write(exercise_video_file.read())
-        
-    with open(user_video_path, "wb") as f:
-        f.write(user_video_file.read())
-    
+        st.warning("Please upload the user video.")
+        return
+
     if st.button("Ready to Receive Results"):
-        frames1, _ = Feedback(exercise_video_path)
-        frames2, _ = Feedback(user_video_path)
-        overlay_vid = "overlayed.mp4"
-        overlay_video_path = os.path.join("uploads", overlay_vid) 
-        Overlay(frames1, frames2, overlay_video_path)
-        if os.path.exists(overlay_video_path):
-            st.video(overlay_video_path, start_time=0)
-        else:
-            st.error("Overlay video could not be found. Please check the Overlay function.")
+        # Process uploaded videos
+        frames1, _ = Feedback(exercise_video_file)
+        frames2, _ = Feedback(user_video_file)
+        overlay_video_data = Overlay(frames1, frames2)
+        st.video(overlay_video_data, format='video/mp4', start_time=0)
 
 if __name__ == '__main__':
     main()

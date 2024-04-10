@@ -4,12 +4,18 @@ import mediapipe as mp
 import os
 import numpy as np
 import math
+import tempfile
 
 def Feedback(video_file):
     mp_drawing = mp.solutions.drawing_utils
     mp_pose = mp.solutions.pose
+    
+    # Save the uploaded video file to a temporary location
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+        temp_file.write(video_file.read())
+        temp_file_path = temp_file.name
 
-    cap = cv2.VideoCapture(video_file)
+    cap = cv2.VideoCapture(temp_file_path)
     if not cap.isOpened():
         print("Could not open the video file.")
         return None, None
@@ -22,10 +28,16 @@ def Feedback(video_file):
                 break
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = pose.process(frame_rgb)
-            frames.append([res.pose_landmarks for res in results.pose_landmarks])
+            frame_landmarks = results.pose_landmarks
+            frames.append(frame_landmarks)
 
     cap.release()
+    
+    # Delete the temporary file after processing
+    os.unlink(temp_file_path)
+    
     return frames, None
+
 
 def connect_landmarks(image, landmarks, shift_x=0, shift_y=0):
     connections = [(11, 12), (11, 13), (12, 14), (13, 15), (14, 16), (15, 17),  # Connect head to upper body
@@ -148,11 +160,17 @@ def main():
         return
 
     if st.button("Ready to Receive Results"):
-        # Process uploaded videos
         frames1, _ = Feedback(exercise_video_file)
         frames2, _ = Feedback(user_video_file)
-        overlay_video_data = Overlay(frames1, frames2)
-        st.video(overlay_video_data, format='video/mp4', start_time=0)
+
+        # Define the output path where the overlay video will be saved
+        output_path = 'overlay_video.mp4'
+
+        # Call Overlay function with output_path argument
+        Overlay(frames1, frames2, output_path)
+
+        # Display the resulting video
+        st.video(output_path, format='video/mp4', start_time=0)
 
 if __name__ == '__main__':
     main()

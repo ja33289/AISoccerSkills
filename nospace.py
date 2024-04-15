@@ -6,6 +6,7 @@ import math
 import tempfile
 import json
 import time
+import io
 
 def Feedback(video_capture):
     mp_pose = mp.solutions.pose
@@ -80,6 +81,8 @@ def Overlay(json_input1, json_input2, accuracy_threshold=10):
     landmarks1 = json.loads(json_input1)
     landmarks2 = json.loads(json_input2)
     output_frames=[]
+    video_buffer = io.BytesIO()
+    out = cv2.VideoWriter(video_buffer, cv2.VideoWriter_fourcc(*'avc1'), 30.0, (1280, 720))
     shift_x1 = 0
     shift_y1 = 0
     shift_x2 = 0
@@ -180,6 +183,9 @@ def Overlay(json_input1, json_input2, accuracy_threshold=10):
         cv2.putText(white_screen, f'Overall Similarity: {accuracy_percentage:.2f}%', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv2.LINE_AA)
 
         output_frames.append(white_screen)
+        out.write(white_screen)
+    out.release()
+    video_buffer.seek(0)
     return output_frames
 
 
@@ -215,6 +221,6 @@ def main():
 
         # Overlay the feedback data
         overlay_vid = Overlay(feedback_json1, feedback_json2)
-        st.video(overlay_vid, format='mov')
+        st.video(overlay_video)
 if __name__ == '__main__':
     main()

@@ -81,8 +81,8 @@ def Overlay(json_input1, json_input2, accuracy_threshold=10):
     landmarks1 = json.loads(json_input1)
     landmarks2 = json.loads(json_input2)
     output_frames=[]
-    video_buffer = io.BytesIO()
-    out = cv2.VideoWriter(video_buffer, cv2.VideoWriter_fourcc(*'avc1'), 30.0, (1280, 720))
+    with tempfile.NamedTemporaryFile(suffix='.mov', delete=False) as temp_video:
+        out = cv2.VideoWriter(temp_video.name, cv2.VideoWriter_fourcc(*'avc1'), 30.0, (1280, 720))
     shift_x1 = 0
     shift_y1 = 0
     shift_x2 = 0
@@ -185,7 +185,6 @@ def Overlay(json_input1, json_input2, accuracy_threshold=10):
         output_frames.append(white_screen)
         out.write(white_screen)
     out.release()
-    video_buffer.seek(0)
     return output_frames
 
 

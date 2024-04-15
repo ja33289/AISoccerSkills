@@ -78,12 +78,10 @@ def draw_landmarks(image, landmarks, shift_x=0, shift_y=0, color=(0, 0, 0)):
         x, y = int(landmark[0] * 1280) + shift_x, int(landmark[1] * 480) + shift_y
         cv2.circle(image, (int(x), int(y)), 3, color, -1)
 
-def Overlay(json_input1, json_input2,output_path=None, accuracy_threshold=10):
+def Overlay(json_input1, json_input2, accuracy_threshold=10):
     landmarks1 = json.loads(json_input1)
     landmarks2 = json.loads(json_input2)
 
-    out = cv2.VideoWriter(output_path,cv2.VideoWriter_fourcc(*'avc1'), 30.0, (1280,720))
-    output_frames = []
     shift_x1 = 0
     shift_y1 = 0
     shift_x2 = 0
@@ -223,7 +221,7 @@ def main():
         overlay_vid = Overlay(feedback_json1, feedback_json2)
 
         # Display the resulting video
-        st.video(overlay_vid, format='mov', start_time=0)
-
+        for frame in overlay_vid:
+            st.image(frame, channels="BGR")
 if __name__ == '__main__':
     main()

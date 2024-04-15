@@ -7,8 +7,6 @@ import tempfile
 import json
 import time
 
-
-
 def Feedback(video_capture):
     mp_pose = mp.solutions.pose
     mp_drawing = mp.solutions.drawing_utils
@@ -217,9 +215,6 @@ def main():
 
         # Overlay the feedback data
         overlay_vid = Overlay(feedback_json1, feedback_json2)
-
-        # Display the resulting video
-        for frame in overlay_vid:
-            st.image(frame, channels="BGR")
+        st.video(overlay_vid, format='mov')
 if __name__ == '__main__':
     main()

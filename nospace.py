@@ -1,47 +1,63 @@
 import cv2
 import streamlit as st
 import mediapipe as mp
-import os
 import numpy as np
 import math
 import tempfile
+import json
+import time
 
-def Feedback(video_file):
-    mp_drawing = mp.solutions.drawing_utils
+
+
+def Feedback(video_capture):
     mp_pose = mp.solutions.pose
-    
-    # Save the uploaded video file to a temporary location
-    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-        temp_file.write(video_file.read())
-        temp_file_path = temp_file.name
+    mp_drawing = mp.solutions.drawing_utils
+    pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-    cap = cv2.VideoCapture(temp_file_path)
-    if not cap.isOpened():
-        print("Could not open the video file.")
-        return None, None
+    pose_data = []
+    start_time = time.time()
+    elapsed_time = 0
+    frame_number = 0
 
-    frames = []
-    with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = pose.process(frame_rgb)
-            frame_landmarks = results.pose_landmarks
-            frames.append(frame_landmarks)
+    while video_capture.isOpened() and elapsed_time < 30:
+        ret, frame = video_capture.read()
 
-    cap.release()
-    
-    # Delete the temporary file after processing
-    os.unlink(temp_file_path)
-    
-    return frames, None
+        if not ret:
+            break
+
+        elapsed_time = time.time() - start_time
+
+        pose_frame_data = {'frame_number': frame_number, 'landmarks': []}
+
+        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        image.flags.writeable = False
+
+        results = pose.process(image)
+
+        image.flags.writeable = True
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+        if results.pose_landmarks:
+            landmarks = [[landmark.x, landmark.y] for landmark in results.pose_landmarks.landmark]
+            pose_frame_data['landmarks'] = landmarks
+
+            mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+
+        pose_data.append(pose_frame_data)
+
+        frame_number += 1
+
+    video_capture.release()
+
+    # Convert pose_data to a JSON string
+    pose_data_json = json.dumps(pose_data)
+    return pose_data_json
 
 
 def connect_landmarks(image, landmarks, shift_x=0, shift_y=0):
-    connections = [(11, 12), (11, 13), (12, 14), (13, 15), (14, 16), (15, 17),  # Connect head to upper body
-                   (23, 24), (11, 23), (12, 24),  # Connect upper body
+    # Define connections between body landmarks
+    connections = [(11, 13), (12, 14), (13, 15), (14, 16), (15, 17),  # Connect head to upper body
+                   (23, 24), (11, 23), (12, 24),(11, 12),  # Chest
                    (11, 23), (12, 24),  # Connect upper body to arms
                    (23, 25), (25, 27), (24, 26), (26, 28),  # legs
                    (27, 29), (29, 31), (27, 31), (28, 30), (28, 32), (30, 32),  # Feet
@@ -53,32 +69,48 @@ def connect_landmarks(image, landmarks, shift_x=0, shift_y=0):
         if 0 <= index1 < len(landmarks) and 0 <= index2 < len(landmarks):
             landmark1 = landmarks[index1]
             landmark2 = landmarks[index2]
-            x1, y1 = int(landmark1[0] * image.shape[1]) + shift_x, int(landmark1[1] * image.shape[0]) + shift_y
-            x2, y2 = int(landmark2[0] * image.shape[1]) + shift_x, int(landmark2[1] * image.shape[0]) + shift_y
+            x1, y1 = int(landmark1[0] * 1280) + shift_x, int(landmark1[1] * 480) + shift_y
+            x2, y2 = int(landmark2[0] * 1280) + shift_x, int(landmark2[1] * 480) + shift_y
             cv2.line(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 0), 1)
 
 def draw_landmarks(image, landmarks, shift_x=0, shift_y=0, color=(0, 0, 0)):
     for landmark in landmarks:
-        x, y = int(landmark[0] * image.shape[1]) + shift_x, int(landmark[1] * image.shape[0]) + shift_y
+        x, y = int(landmark[0] * 1280) + shift_x, int(landmark[1] * 480) + shift_y
         cv2.circle(image, (int(x), int(y)), 3, color, -1)
 
+def Overlay(json_input1, json_input2, accuracy_threshold=10):
+    landmarks1 = json.loads(json_input1)
+    landmarks2 = json.loads(json_input2)
 
-def Overlay(frames1, frames2, output_path, accuracy_threshold=10):
-        # Define the fourcc code for H.264 compression
-    fourcc = cv2.VideoWriter_fourcc(*'avc1')
-
-    # Create a VideoWriter object with H.264 codec
-    out = cv2.VideoWriter(output_path, fourcc, 30.0, (1280, 480))
-
+    out = cv2.VideoWriter(cv2.VideoWriter_fourcc(*'avc1'), 30.0, (1280,720))
+    output_frames = []
+    shift_x1 = 0
+    shift_y1 = 0
+    shift_x2 = 0
+    shift_y2 = 0
     total_accurate_matches = 0
     total_leg_angles = 0
     total_ankle_angles = 0
 
-    for frame_number in range(min(len(frames1), len(frames2))):
-        pose_frame_data1 = np.array(frames1[frame_number])  # Convert to numpy array
-        pose_frame_data2 = np.array(frames2[frame_number])  # Convert to numpy array
-        if len(pose_frame_data1.shape) != 1 or len(pose_frame_data2.shape) != 1:
-            continue
+    x_min_1 = min(landmark[0] for landmark in landmarks1[0]['landmarks'])
+    x_max_1 = max(landmark[0] for landmark in landmarks1[0]['landmarks'])
+    y_min_1 = min(landmark[1] for landmark in landmarks1[0]['landmarks'])
+    y_max_1 = max(landmark[1] for landmark in landmarks1[0]['landmarks'])
+
+    x_min_2 = min(landmark[0] for landmark in landmarks2[0]['landmarks'])
+    x_max_2 = max(landmark[0] for landmark in landmarks2[0]['landmarks'])
+    y_min_2 = min(landmark[1] for landmark in landmarks2[0]['landmarks'])
+    y_max_2 = max(landmark[1] for landmark in landmarks2[0]['landmarks'])
+
+    # Calculate scaling factors
+    scale_x = (x_max_2 - x_min_2) / (x_max_1 - x_min_1)
+    scale_y = (y_max_2 - y_min_2) / (y_max_1 - y_min_1)
+
+    # Process frames to create the output video
+    for frame_number in range(min(len(landmarks1), len(landmarks2))):
+        
+        pose_frame_data1 = landmarks1[frame_number]['landmarks']
+        pose_frame_data2 = landmarks2[frame_number]['landmarks']
 
         # Calculate angles for the legs of both sets of body marks
         legangle_pose1 = [(math.degrees(math.atan2(pose_frame_data1[23][1] - pose_frame_data1[25][1], pose_frame_data1[23][0] - pose_frame_data1[25][0])) +
@@ -103,50 +135,58 @@ def Overlay(frames1, frames2, output_path, accuracy_threshold=10):
                         math.degrees(math.atan2(pose_frame_data2[28][1] - pose_frame_data2[32][1], pose_frame_data2[28][0] - pose_frame_data2[32][0])))]
 
         # Compare leg angles between the two poses
-        for legangle_pose1, legangle_pose2 in zip(legangle_pose1, legangle_pose2):
-            if abs(legangle_pose1 - legangle_pose2) <= accuracy_threshold:
-                total_accurate_matches += 1
-            total_leg_angles += 1
+        for angle1 in legangle_pose1:
+            for angle2 in legangle_pose2:
+                if abs(angle1 - angle2) <= accuracy_threshold:
+                    total_accurate_matches += 1
+                    break  # Exit inner loop once a match is found
+        total_leg_angles += len(legangle_pose1)  # Add all angles from the first pose
 
         # Compare ankle angles between the two poses
-        for ankleangle_pose1, ankleangle_pose2 in zip(ankleangle_pose1, ankleangle_pose2):
-            if abs(ankleangle_pose1 - ankleangle_pose2) <= accuracy_threshold:
-                total_accurate_matches += 1
-            total_ankle_angles += 1
+        for angle1 in ankleangle_pose1:
+            for angle2 in ankleangle_pose2:
+                if abs(angle1 - angle2) <= accuracy_threshold:
+                    total_accurate_matches += 1
+                    break  # Exit inner loop once a match is found
+        total_ankle_angles += len(ankleangle_pose1)
 
-    # Calculate percentage accuracy
     accuracy_percentage = (total_accurate_matches / (total_leg_angles + total_ankle_angles)) * 100 if (total_leg_angles + total_ankle_angles) > 0 else 0
+    pose_frame_data1 = landmarks1[frame_number]['landmarks']
+    pose_frame_data2 = landmarks2[frame_number]['landmarks']
+    pose_frame_data1 = [(landmark[0] * scale_x, landmark[1] * scale_y) for landmark in pose_frame_data1]
+    center_x1 = sum(landmark[0] for landmark in pose_frame_data1) / len(pose_frame_data1)
+    center_y1 = sum(landmark[1] for landmark in pose_frame_data1) / len(pose_frame_data1)
+    center_x2 = sum(landmark[0] for landmark in pose_frame_data2) / len(pose_frame_data2)
+    center_y2 = sum(landmark[1] for landmark in pose_frame_data2) / len(pose_frame_data2)
+    shift_x_center = 350- ((720 / 2) - (center_x1 + center_x2) / 2)
+    shift_y_center = 360-((480 / 2) - (center_y1 + center_y2) / 2)
+    shift_x1 += shift_x_center
+    shift_y1 += shift_y_center
+    shift_x2 += shift_x_center
+    shift_y2 += shift_y_center
+    # Process frames again to create the output video
+    for frame_number in range(min(len(landmarks1), len(landmarks2))):
+        white_screen = np.ones((720,1280,3), dtype=np.uint8) * 255
 
-    for frame_number in range(min(len(frames1), len(frames2))):
-        white_screen = np.ones((480, 1280, 3), dtype=np.uint8) * 255
-        pose_frame_data1 = np.array(frames1[frame_number])  # Convert to numpy array
-        pose_frame_data2 = np.array(frames2[frame_number])  # Convert to numpy array
-        if len(pose_frame_data1.shape) != 1 or len(pose_frame_data2.shape) != 1:
-            continue
-        # Calculate the center of mass for each set of landmarks
-        center_x1 = np.mean(pose_frame_data1[:, 0])
-        center_y1 = np.mean(pose_frame_data1[:, 1])
-        center_x2 = np.mean(pose_frame_data2[:, 0])
-        center_y2 = np.mean(pose_frame_data2[:, 1])
+        pose_frame_data1 = landmarks1[frame_number]['landmarks']
+        pose_frame_data2 = landmarks2[frame_number]['landmarks']
+        pose_frame_data1 = [(landmark[0] * scale_x, landmark[1] * scale_y) for landmark in pose_frame_data1]
 
-        # Calculate the shifts needed to center the landmarks in the frame
-        shift_x1 = int(1280 / 2 - center_x1 * 1280)
-        shift_y1 = int(480 / 2 - center_y1 * 480)
-        shift_x2 = int(1280 / 2 - center_x2 * 1280)
-        shift_y2 = int(480 / 2 - center_y2 * 480)
         draw_landmarks(white_screen, pose_frame_data1, shift_x=shift_x1, shift_y=shift_y1, color=(255, 0, 0))
         draw_landmarks(white_screen, pose_frame_data2, shift_x=shift_x2, shift_y=shift_y2, color=(0, 0, 255))
         connect_landmarks(white_screen, pose_frame_data1, shift_x=shift_x1, shift_y=shift_y1)
         connect_landmarks(white_screen, pose_frame_data2, shift_x=shift_x2, shift_y=shift_y2)
+        # Add key at the bottom left showing "Exercise Marks" in blue and "User Marks" in red
+        cv2.putText(white_screen, 'Exercise Marks (Blue)', (10, 660), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
+        cv2.putText(white_screen, 'User Marks (Red)', (10, 680), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
 
-        cv2.putText(white_screen, 'Exercise Marks (Red)', (10, 450), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
-        cv2.putText(white_screen, 'User Marks (Blue)', (10, 470), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+        # Add text overlay for overall similarity
         cv2.putText(white_screen, f'Overall Similarity: {accuracy_percentage:.2f}%', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv2.LINE_AA)
 
-        out.write(white_screen)
+        output_frames.append(white_screen)
 
     out.release()
-    cv2.destroyAllWindows()
+    return output_frames
 
 
 def main():
@@ -164,17 +204,26 @@ def main():
         return
 
     if st.button("Ready to Receive Results"):
-        frames1, _ = Feedback(exercise_video_file)
-        frames2, _ = Feedback(user_video_file)
+        with tempfile.NamedTemporaryFile(delete=False) as exercise_temp, tempfile.NamedTemporaryFile(delete=False) as user_temp:
+            # Write the contents of the file objects to temporary files
+            exercise_temp.write(exercise_video_file.read())
+            exercise_temp.seek(0)
+            user_temp.write(user_video_file.read())
+            user_temp.seek(0)
 
-        # Define the output path where the overlay video will be saved
-        output_path = 'overlay_video.mp4'
+            # Create video capture objects from the temporary files
+            exercise_video_obj = cv2.VideoCapture(exercise_temp.name)
+            user_video_obj = cv2.VideoCapture(user_temp.name)
 
-        # Call Overlay function with output_path argument
-        Overlay(frames1, frames2, output_path)
+            # Get feedback data for both videos
+            feedback_json1 = Feedback(exercise_video_obj)
+            feedback_json2 = Feedback(user_video_obj)
+
+        # Overlay the feedback data
+        overlay_vid = Overlay(feedback_json1, feedback_json2)
 
         # Display the resulting video
-        st.video(output_path, format='video/mp4', start_time=0)
+        st.video(overlay_vid, format='mov', start_time=0)
 
 if __name__ == '__main__':
     main()

@@ -220,6 +220,6 @@ def main():
 
         # Overlay the feedback data
         overlay_vid = Overlay(feedback_json1, feedback_json2)
-        st.video(overlay_video)
+        st.video(overlay_vid)
 if __name__ == '__main__':
     main()

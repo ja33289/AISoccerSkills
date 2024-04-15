@@ -182,8 +182,6 @@ def Overlay(json_input1, json_input2, accuracy_threshold=10):
         cv2.putText(white_screen, f'Overall Similarity: {accuracy_percentage:.2f}%', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv2.LINE_AA)
 
         output_frames.append(white_screen)
-
-    out.release()
     return output_frames
 
 

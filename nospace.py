@@ -81,7 +81,7 @@ def draw_landmarks(image, landmarks, shift_x=0, shift_y=0, color=(0, 0, 0)):
 def Overlay(json_input1, json_input2, accuracy_threshold=10):
     landmarks1 = json.loads(json_input1)
     landmarks2 = json.loads(json_input2)
-
+    output_frames=[]
     shift_x1 = 0
     shift_y1 = 0
     shift_x2 = 0

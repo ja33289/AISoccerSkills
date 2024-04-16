@@ -220,10 +220,10 @@ def main():
             feedback_json1 = Feedback(exercise_video_obj)
             feedback_json2 = Feedback(user_video_obj)
 
-        # Overlay the feedback data
-        overlay_vid = Overlay(feedback_json1, feedback_json2)
-        # Display the resulting video
-        st.video(overlay_vid, format='mov', start_time=0)
+            # Overlay the feedback data
+            overlay_vid = Overlay(feedback_json1, feedback_json2)
+            # Display the resulting video
+            st.video(overlay_vid, format='mov', start_time=0)
 
 if __name__ == '__main__':
     main()
